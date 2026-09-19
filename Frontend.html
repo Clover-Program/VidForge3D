@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VIDFORGE-3D / 04 — Spatial Reconstruction Bench</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Unified Three.js Imports -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+
+  <style>
+    :root {
+      --chassis: #ECE8DF;
+      --tile: #FAF8F5;
+      --tile-hover: #FFFFFF;
+      --well: #DFDACF;
+      --ink: #161719;
+      --ink-mid: #6E727A;
+      --ink-faint: #A7ABB3;
+
+      --hairline: rgba(22, 23, 25, 0.12);
+      --hairline-strong: rgba(22, 23, 25, 0.22);
+
+      --signal: #E44926;
+      --signal-tint: rgba(228, 73, 38, 0.08);
+      --mint: #1FA87A;
+      --mint-tint: rgba(31, 168, 122, 0.1);
+      --warning: #F59E0B;
+      --warning-tint: rgba(245, 158, 11, 0.12);
+
+      --stamp: 2px 2px 0px var(--ink);
+      --stamp-subtle: 1px 1px 0px var(--ink);
+
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-sans: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    *::-webkit-scrollbar { display: none; }
+
+    body {
+      background-color: var(--chassis);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header.chassis-mast {
+      height: 44px;
+      background: var(--tile);
+      border-bottom: 1.5px solid var(--hairline-strong);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1rem;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .mast-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-mark {
+      width: 10px;
+      height: 10px;
+      background: var(--signal);
+      border-radius: 2px;
+      box-shadow: 1px 1px 0px var(--ink);
+    }
+
+    .deck-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--well);
+      padding: 2px;
+      border: 1px solid var(--hairline-strong);
+      border-radius: 3px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--ink-mid);
+      padding: 0.35rem 0.8rem;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.12s ease;
+    }
+
+    .tab-btn.active {
+      background: var(--ink);
+      color: var(--tile);
+      border-color: var(--ink);
+      box-shadow: var(--stamp-subtle);
+    }
+
+    .mast-telemetry {
+      display: flex;
+      gap: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-mid);
+    }
+
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 2px;
+      text-transform: uppercase;
+      border: 1px solid var(--hairline-strong);
+      background: var(--well);
+      color: var(--ink-mid);
+    }
+
+    .badge.active {
+      background: var(--mint-tint);
+      color: var(--mint);
+      border-color: var(--mint);
+    }
+
+    .view-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      overflow: hidden;
+      min-height: 0;
+      height: calc(100vh - 44px);
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--chassis);
+    }
+
+    .panel.left {
+      border-right: 1.5px solid var(--hairline-strong);
+      overflow-y: auto;
+      padding: 0.85rem;
+      gap: 0.85rem;
+    }
+
+    .recovery-banner {
+      background: var(--warning-tint);
+      border: 1.5px solid var(--warning);
+      border-radius: 3px;
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      display: none;
+      box-shadow: var(--stamp-subtle);
+    }
+
+    .recovery-banner strong {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: #B45309;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .card {
+      background: var(--tile);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 3px;
+      box-shadow: var(--stamp);
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--ink-mid);
+    }
+
+    .file-dropzone {
+      border: 1.5px dashed var(--hairline-strong);
+      background: var(--well);
+      border-radius: 2px;
+      padding: 1.25rem 0.5rem;
+      text-align: center;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--ink);
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .file-dropzone:hover {
+      background: var(--signal-tint);
+      border-color: var(--signal);
+    }
+
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: var(--well);
+      border: 1px solid var(--hairline-strong);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: var(--ink);
+      background: var(--tile);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 0.65rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border-radius: 2px;
+      cursor: pointer;
+      border: 1.5px solid var(--ink);
+      box-shadow: var(--stamp);
+      transition: all 0.1s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      background: var(--tile);
+      color: var(--ink);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: none;
+    }
+
+    .btn-primary { background: var(--ink); color: var(--tile); }
+    .btn-danger { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
+    .btn-warn { background: #FFFBEB; color: #D97706; border-color: #D97706; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+    .stage-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .stage-info {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--ink-mid);
+    }
+
+    .progress-track {
+      height: 8px;
+      background: var(--well);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 1px;
+      overflow: hidden;
+      padding: 1px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--signal);
+      transition: width 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .metrics-micro-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      background: var(--well);
+      padding: 4px;
+      border-radius: 2px;
+      border: 1px solid var(--hairline-strong);
+      margin-top: 0.4rem;
+    }
+
+    .micro-metric {
+      background: var(--tile);
+      padding: 0.35rem 0.5rem;
+      border-radius: 1px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .micro-metric span.lbl {
+      font-family: var(--font-mono);
+      font-size: 0.58rem;
+      color: var(--ink-mid);
+      font-weight: 600;
+    }
+
+    .micro-metric span.val {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink);
+      font-weight: 700;
+      margin-top: 1px;
+    }
+
+    /* CENTER STAGE ENGINE VIEW */
+    .center-stage {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--well);
+      overflow: hidden;
+      height: 100%;
+      min-height: 0;
+      flex: 1;
+    }
+
+    #stage-canvas {
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      display: block;
+    }
+    #stage-canvas:active { cursor: grabbing; }
+
+    .stage-notice {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(22, 23, 25, 0.9);
+      color: #FAF8F5;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.45rem 0.8rem;
+      border-radius: 2px;
+      display: none;
+      z-index: 30;
+      box-shadow: var(--stamp-subtle);
+      border-left: 3px solid var(--signal);
+    }
+
+    .tty-drawer {
+      border-top: 1.5px solid var(--ink);
+      background: #151719;
+      color: var(--tile);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 40;
+      transition: height 0.2s ease-in-out;
+    }
+
+    .tty-drawer.collapsed #termOutput { display: none; }
+    .tty-drawer:not(.collapsed) { height: 220px; }
+
+    .tty-bar {
+      height: 32px;
+      padding: 0 0.85rem;
+      background: #1C1E22;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--ink-faint);
+      flex-shrink: 0;
+    }
+
+    .tty-bar:hover { color: #FFF; }
+
+    .term-screen {
+      flex: 1;
+      min-height: 0;
+      padding: 0.75rem 0.85rem;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      line-height: 1.5;
+      color: #C8CDD5;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: #151719;
+      border: none;
+      margin: 0;
+    }
+
+    #viewLibrary {
+      display: none;
+      flex: 1;
+      padding: 1.5rem;
+      overflow-y: auto;
+      background: var(--chassis);
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .gallery-card {
+      background: var(--tile);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 3px;
+      padding: 0.85rem;
+      box-shadow: var(--stamp);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .gallery-card h4 {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--ink);
+      word-break: break-all;
+    }
+
+    .gallery-meta {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-mid);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="chassis-mast">
+    <div class="mast-brand">
+      <span class="brand-mark"></span>
+      <span>VIDFORGE-3D / 04 RECON</span>
+    </div>
+
+    <div class="deck-tabs">
+      <button class="tab-btn active" onclick="switchTab('dashboard')">Live Studio</button>
+      <button class="tab-btn" onclick="switchTab('library')">Asset Library</button>
+    </div>
+
+    <div class="mast-telemetry">
+      <span>SOLVER: <b id="telemetrySolver">CASPAR (GPU)</b></span>
+      <span>PROCESS: <span id="processStatusBadge" class="badge">OFFLINE</span></span>
+    </div>
+  </header>
+
+  <div class="view-container" id="viewDashboard">
+    
+    <div class="panel left">
+      
+      <div class="recovery-banner" id="recoveryBanner">
+        <strong>[RESUMPTION DETECTED]</strong>
+        <div id="recoveryDetail" style="font-family:var(--font-mono); font-size:0.68rem; margin-bottom: 0.5rem; word-break:break-all;">Interrupted session.</div>
+        <div class="btn-group">
+          <button class="btn btn-warn" onclick="triggerResume()">Resume Session</button>
+          <button class="btn" onclick="dismissRecovery()">Dismiss</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span>TARGET INGESTION</span>
+          <span>STAGE 01</span>
+        </div>
+
+        <div class="file-dropzone" onclick="document.getElementById('fileInput').click()">
+          <span id="dropzoneText">[ + SELECT OR DROP OPTICAL VIDEO ]</span>
+          <input type="file" id="fileInput" accept="video/*" style="display:none" onchange="handleFileSelect(this)">
+        </div>
+
+        <input type="text" id="videoPathInput" placeholder="Server filepath automatically set..." />
+
+        <div class="btn-group">
+          <button class="btn btn-primary" id="startBtn" onclick="triggerStart()">Bake 3D Model</button>
+          <button class="btn btn-danger" id="stopBtn" onclick="triggerStop()" disabled>Halt</button>
+        </div>
+      </div>
+
+      <div class="card" id="advancedConfigCard">
+        <div class="card-header" style="cursor: pointer;" onclick="toggleAdvancedSettings()">
+          <span>ADVANCED CONFIG</span>
+          <span id="configToggleIcon">[ + REVEAL ]</span>
+        </div>
+
+        <div id="advancedSettingsBody" style="display: none; flex-direction: column; gap: 0.6rem;">
+          <div style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mid);">
+            ALL RECONSTRUCTION ENGINE PARAMETERS
+          </div>
+
+          <div id="dynamicConfigFields" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 380px; overflow-y: auto; padding-right: 2px;"></div>
+
+          <div class="btn-group" style="margin-top: 0.3rem;">
+            <button class="btn btn-primary" onclick="saveConfiguration()">Save Config</button>
+            <button class="btn" onclick="fetchConfiguration()">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="flex: 1;">
+        <div class="card-header">
+          <span>PIPELINE TELEMETRY</span>
+          <span style="color:var(--signal);" id="liveSubstageTag">STANDBY</span>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>1. Frames & SIFT</span><span id="labelStage1">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage1"></div></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>2. Feature Matching</span><span id="labelStage2">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage2"></div></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>3A. Camera Registration</span><span id="labelStage3">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage3"></div></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>3B. Bundle Adjustment</span><span id="labelStage3BA">STANDBY</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage3BA"></div></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>4. 3D Gaussian Splatting</span><span id="labelStage4">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage4"></div></div>
+        </div>
+
+        <div class="stage-row">
+          <div class="stage-info"><span>5. PLY & Poisson Mesh</span><span id="labelStage5">0%</span></div>
+          <div class="progress-track"><div class="progress-bar" id="barStage5"></div></div>
+        </div>
+
+        <div class="metrics-micro-grid">
+          <div class="micro-metric">
+            <span class="lbl">ACTIVE STAGE</span>
+            <span class="val" id="telemetryStatus">IDLE</span>
+          </div>
+          <div class="micro-metric">
+            <span class="lbl">ACTIVE GAUSSIANS</span>
+            <span class="val" id="telemetryGaussians">--</span>
+          </div>
+          <div class="micro-metric">
+            <span class="lbl">POINTS ALIGNED</span>
+            <span class="val" id="telemetryPoints">--</span>
+          </div>
+          <div class="micro-metric">
+            <span class="lbl">EXTRACTED FRAMES</span>
+            <span class="val" id="telemetryFrames">--</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="center-stage">
+      <div id="stageNotice" class="stage-notice">CACHED RUN: SHOWING POINT CLOUD (10S)</div>
+      <div id="stage-canvas"></div>
+
+      <div class="stage-hud" style="position: absolute; bottom: 40px; left: 15px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--ink-mid); pointer-events: auto; display: flex; align-items: center; gap: 10px; z-index: 20;">
+        <div>
+          <span style="color:var(--ink); font-weight:700; display: block;">STAGE TURNTABLE // ACTIVE</span>
+          <span>DRAG TO ORBIT • RIGHT-CLICK / SHIFT+DRAG TO PAN • WHEEL TO ZOOM</span>
+        </div>
+        <button id="spinToggleBtn" class="btn" style="padding: 4px 10px; font-size: 0.62rem; flex: none;" onclick="toggleAutoSpin()">PAUSE SPIN</button>
+      </div>
+
+      <div class="tty-drawer collapsed" id="ttyDrawer" style="position: absolute; bottom: 0; width: 100%;">
+        <div class="tty-bar" onclick="toggleTTY()">
+          <span>TELEMETRY TTY // RAW STDOUT STREAM</span>
+          <span id="ttyExpandPrompt">[ + EXPAND LOGS ]</span>
+        </div>
+        <pre class="term-screen" id="termOutput"></pre>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="viewLibrary">
+    <div class="card-header" style="margin-bottom: 0.5rem;">
+      <span style="font-size: 0.85rem;">RECONSTRUCTED SPECIMEN RACK</span>
+      <span>PERSISTENT MANIFEST</span>
+    </div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+
+  <script>
+    /* =============================================================
+       1. GLOBAL STATE & LOG BUFFER
+    ============================================================= */
+    let logCursor = 0;
+    let isPolling = true;
+    let isAutoSpinning = true;
+    let totalExtractedFrames = 0;
+    let isSessionActive = false;
+
+    // Viewport State Machine
+    const stageState = {
+      activeScene: "",
+      splatLoaded: false,
+      meshLoaded: false,
+      cachedTimer: null,
+      countdownInterval: null
+    };
+
+    function resetTelemetryUI() {
+      ['Stage1', 'Stage2', 'Stage3', 'Stage4', 'Stage5'].forEach(s => setProgress(s, 0, '0%'));
+      document.getElementById('labelStage3BA').innerText = 'STANDBY';
+      document.getElementById('barStage3BA').style.width = '0%';
+      document.getElementById('telemetryGaussians').innerText = '--';
+      document.getElementById('telemetryPoints').innerText = '--';
+      document.getElementById('telemetryFrames').innerText = '--';
+      document.getElementById('telemetryStatus').innerText = 'INITIALIZING';
+      document.getElementById('liveSubstageTag').innerText = 'INITIALIZING';
+      totalExtractedFrames = 0;
+
+      clearCachedTransition();
+      removeStageModel();
+      stageState.splatLoaded = false;
+      stageState.meshLoaded = false;
+      pointCloud.visible = true;
+    }
+
+    function clearCachedTransition() {
+      if (stageState.cachedTimer) {
+        clearTimeout(stageState.cachedTimer);
+        stageState.cachedTimer = null;
+      }
+      if (stageState.countdownInterval) {
+        clearInterval(stageState.countdownInterval);
+        stageState.countdownInterval = null;
+      }
+      document.getElementById('stageNotice').style.display = 'none';
+    }
+
+    function toggleAutoSpin() {
+      isAutoSpinning = !isAutoSpinning;
+      const btn = document.getElementById('spinToggleBtn');
+      if (btn) btn.innerText = isAutoSpinning ? 'PAUSE SPIN' : 'RESUME SPIN';
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      if (tab === 'dashboard') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('viewDashboard').style.display = 'grid';
+        document.getElementById('viewLibrary').style.display = 'none';
+        setTimeout(resizeViewport, 50);
+      } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('viewDashboard').style.display = 'none';
+        document.getElementById('viewLibrary').style.display = 'block';
+        loadLibrary();
+      }
+    }
+
+    function toggleTTY() {
+      const drawer = document.getElementById('ttyDrawer');
+      const prompt = document.getElementById('ttyExpandPrompt');
+      drawer.classList.toggle('collapsed');
+      
+      const isCollapsed = drawer.classList.contains('collapsed');
+      prompt.textContent = isCollapsed ? '[ + EXPAND LOGS ]' : '[ − COLLAPSE ]';
+
+      setTimeout(() => {
+        resizeViewport();
+        if (!isCollapsed) {
+          const term = document.getElementById('termOutput');
+          term.scrollTop = term.scrollHeight;
+        }
+      }, 210);
+    }
+
+    /* =============================================================
+       2. CONFIGURATION HANDLER
+    ============================================================= */
+    let cachedConfig = {};
+
+    function toggleAdvancedSettings() {
+      const body = document.getElementById('advancedSettingsBody');
+      const icon = document.getElementById('configToggleIcon');
+      const isClosed = body.style.display === 'none';
+
+      body.style.display = isClosed ? 'flex' : 'none';
+      icon.innerText = isClosed ? '[ − HIDE ]' : '[ + REVEAL ]';
+
+      if (isClosed && Object.keys(cachedConfig).length === 0) {
+        fetchConfiguration();
+      }
+    }
+
+    function renderConfigForm(cfg) {
+      const container = document.getElementById('dynamicConfigFields');
+      container.innerHTML = '';
+
+      const dropdowns = {
+        extraction_mode: ['all', 'fps', 'every_nth'],
+        camera_model: ['SIMPLE_RADIAL', 'RADIAL', 'OPENCV', 'OPENCV_FISHEYE', 'PINHOLE', 'SIMPLE_PINHOLE'],
+        vis: ['viewer', 'none', 'wandb', 'tensorboard']
+      };
+
+      Object.entries(cfg).forEach(([key, val]) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+
+        const label = document.createElement('label');
+        label.style.cssText = 'font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mid); text-transform: uppercase;';
+        label.innerText = key.replace(/_/g, ' ');
+
+        let input;
+        if (typeof val === 'boolean') {
+          input = document.createElement('select');
+          input.innerHTML = `<option value="true" ${val ? 'selected' : ''}>TRUE</option><option value="false" ${!val ? 'selected' : ''}>FALSE</option>`;
+        } else if (dropdowns[key]) {
+          input = document.createElement('select');
+          input.innerHTML = dropdowns[key].map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('');
+        } else {
+          input = document.createElement('input');
+          input.type = typeof val === 'number' ? 'number' : 'text';
+          if (typeof val === 'number') input.step = Number.isInteger(val) ? '1' : '0.1';
+          input.value = val;
+        }
+
+        input.id = `cfg_field_${key}`;
+        input.dataset.type = typeof val;
+
+        row.appendChild(label);
+        row.appendChild(input);
+        container.appendChild(row);
+      });
+    }
+
+    async function fetchConfiguration() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) return;
+        cachedConfig = await res.json();
+        renderConfigForm(cachedConfig);
+      } catch (err) {}
+    }
+
+    async function saveConfiguration() {
+      const payload = { ...cachedConfig };
+      Object.keys(payload).forEach(key => {
+        const el = document.getElementById(`cfg_field_${key}`);
+        if (!el) return;
+        const originalType = el.dataset.type;
+        if (originalType === 'boolean') {
+          payload[key] = el.value === 'true';
+        } else if (originalType === 'number') {
+          payload[key] = el.step === '1' ? parseInt(el.value, 10) : parseFloat(el.value);
+        } else {
+          payload[key] = el.value.trim();
+        }
+      });
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload, null, 4)
+        });
+        if (res.ok) {
+          cachedConfig = payload;
+          alert('Configuration updated.');
+        }
+      } catch (e) {
+        alert('Config save error: ' + e);
+      }
+    }
+
+    /* =============================================================
+       3. THREE.JS VIEWPORT & ORIGIN-LOCKED ASSET ENGINE
+    ============================================================= */
+    const stage = document.getElementById('stage-canvas');
+    const scene = new THREE.Scene();
+    
+    const initialW = Math.max(stage.clientWidth || 800, 300);
+    const initialH = Math.max(stage.clientHeight || 600, 300);
+    const camera = new THREE.PerspectiveCamera(40, initialW / initialH, 0.05, 1000);
+    camera.position.set(0, 0.4, 4.0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(initialW, initialH);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    stage.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight1.position.set(3, 5, 4);
+    scene.add(dirLight1);
+    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight2.position.set(-3, -3, -3);
+    scene.add(dirLight2);
+
+    function resizeViewport() {
+      const w = stage.clientWidth;
+      const h = stage.clientHeight;
+      if (!w || !h || isNaN(w) || isNaN(h)) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resizeViewport);
+
+    // Pivot anchor to guarantee rotation strictly around (0, 0, 0)
+    const stagePivot = new THREE.Group();
+    scene.add(stagePivot);
+
+    // Turnstile Idle Point Cloud
+    const count = 7500;
+    const idleGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const colorCarbon = new THREE.Color('#161719');
+    const colorSignal = new THREE.Color('#E44926');
+
+    for (let i = 0; i < count; i++) {
+      const u = Math.random() * Math.PI * 2;
+      const v = Math.random() * Math.PI * 2;
+      const r = 0.9 + 0.25 * Math.sin(5 * u);
+      positions[i * 3] = r * Math.sin(u) * Math.cos(v);
+      positions[i * 3 + 1] = r * Math.sin(u) * Math.sin(v) * 0.75;
+      positions[i * 3 + 2] = r * Math.cos(u);
+      const isTip = Math.random() > 0.85;
+      const c = isTip ? colorSignal : colorCarbon;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+
+    idleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    idleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const pointCloud = new THREE.Points(idleGeometry, new THREE.PointsMaterial({
+      size: 0.024,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85
+    }));
+    scene.add(pointCloud);
+
+    let currentStageModel = null;
+    let isFetchingAsset = false;
+    const plyLoader = new THREE.PLYLoader();
+    const objLoader = new THREE.OBJLoader();
+
+    function removeStageModel() {
+      if (!currentStageModel) return;
+      stagePivot.remove(currentStageModel);
+      currentStageModel.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+      currentStageModel = null;
+    }
+
+    function fitCameraToObject(box, appliedScale) {
+      const size = box.getSize(new THREE.Vector3()).multiplyScalar(appliedScale);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const fov = camera.fov * (Math.PI / 180);
+      let dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5;
+
+      orbitTarget.set(0, 0, 0);
+      spherical.radius = Math.max(dist, 3.0);
+      spherical.phi = Math.PI / 2 - 0.1;
+      updateCameraFromSpherical();
+    }
+
+    function normalizeAndCenter(object3D) {
+      // 1. Reset root transforms
+      object3D.position.set(0, 0, 0);
+      object3D.rotation.set(0, 0, 0);
+      object3D.scale.set(1, 1, 1);
+      object3D.updateMatrixWorld(true);
+
+      // 2. Compute bounding geometry box
+      const box = new THREE.Box3().setFromObject(object3D);
+      if (box.isEmpty()) return;
+
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      if (isNaN(center.x) || isNaN(size.x)) return;
+
+      // 3. Shift internal geometry so center is strictly (0, 0, 0)
+      object3D.position.sub(center);
+
+      // 4. Calculate uniform scale
+      const maxDim = Math.max(size.x, size.y, size.z);
+      let scale = 1.0;
+      if (maxDim > 0 && isFinite(maxDim)) {
+        scale = 2.4 / maxDim;
+        object3D.scale.setScalar(scale);
+        object3D.position.multiplyScalar(scale);
+      }
+
+      // 5. Mount inside stagePivot at origin
+      stagePivot.position.set(0, 0, 0);
+      stagePivot.rotation.set(0, 0, 0);
+      stagePivot.add(object3D);
+
+      // 6. Automatically frame the camera to fit viewport
+      fitCameraToObject(box, scale);
+    }
+
+    async function loadModel(sceneName, type) {
+      if (!sceneName || isFetchingAsset) return;
+      isFetchingAsset = true;
+
+      const endpoint = `/api/model?scene=${encodeURIComponent(sceneName)}&type=${type}`;
+      
+      const onErr = (err) => {
+        console.warn(`Model fetch failed [${type}]:`, err);
+        isFetchingAsset = false;
+        if (!currentStageModel) pointCloud.visible = true;
+      };
+
+      const setModel = (newObject) => {
+        removeStageModel();
+        pointCloud.visible = false;
+        currentStageModel = newObject;
+        normalizeAndCenter(currentStageModel);
+        isFetchingAsset = false;
+        resizeViewport();
+      };
+
+      if (type === 'splat') {
+        plyLoader.load(endpoint, (geometry) => {
+          geometry.computeBoundingBox();
+          const hasColors = geometry.hasAttribute('color');
+          const material = new THREE.PointsMaterial({
+            size: 0.028,
+            sizeAttenuation: true,
+            vertexColors: hasColors,
+            color: hasColors ? 0xffffff : 0x1FA87A,
+            transparent: true,
+            opacity: 0.95
+          });
+          setModel(new THREE.Points(geometry, material));
+          stageState.splatLoaded = true;
+        }, undefined, onErr);
+      } else if (type === 'mesh') {
+        objLoader.load(endpoint, (objGroup) => {
+          objGroup.traverse((child) => {
+            if (child.isMesh) {
+              if (child.geometry) child.geometry.computeVertexNormals();
+              const hasColor = child.geometry && child.geometry.hasAttribute('color');
+              child.material = new THREE.MeshStandardMaterial({
+                vertexColors: hasColor,
+                color: hasColor ? 0xffffff : 0xDFDACF,
+                side: THREE.DoubleSide,
+                roughness: 0.5,
+                metalness: 0.1
+              });
+            }
+          });
+          setModel(objGroup);
+          stageState.meshLoaded = true;
+        }, undefined, onErr);
+      }
+    }
+
+    /* =============================================================
+       4. CACHE VERIFICATION & TIMED SWAP
+    ============================================================= */
+    async function checkExistingSceneAssets(sceneName) {
+      if (!sceneName) return;
+      clearCachedTransition();
+      stageState.activeScene = sceneName;
+
+      try {
+        const res = await fetch(`/api/scene-assets?scene=${encodeURIComponent(sceneName)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // If cached assets exist, light up all gauges immediately
+        if (data.hasMesh || data.hasSplat) {
+          isSessionActive = true;
+          ['Stage1', 'Stage2', 'Stage3', 'Stage4', 'Stage5'].forEach(s => setProgress(s, 100, 'DONE'));
+          document.getElementById('labelStage3BA').innerText = 'DONE';
+          document.getElementById('barStage3BA').style.width = '100%';
+          document.getElementById('liveSubstageTag').innerText = 'CACHED';
+          document.getElementById('telemetryStatus').innerText = 'COMPLETE';
+        }
+
+        if (data.hasSplat && data.hasMesh) {
+          loadModel(sceneName, 'splat');
+          
+          let remaining = 10;
+          const notice = document.getElementById('stageNotice');
+          notice.innerText = `CACHED RUN: SHOWING POINT CLOUD (${remaining}S)`;
+          notice.style.display = 'block';
+
+          stageState.countdownInterval = setInterval(() => {
+            remaining--;
+            if (remaining > 0) {
+              notice.innerText = `CACHED RUN: SHOWING POINT CLOUD (${remaining}S)`;
+            } else {
+              clearInterval(stageState.countdownInterval);
+              stageState.countdownInterval = null;
+            }
+          }, 1000);
+
+          stageState.cachedTimer = setTimeout(() => {
+            notice.style.display = 'none';
+            loadModel(sceneName, 'mesh');
+            stageState.cachedTimer = null;
+          }, 10000);
+
+        } else if (data.hasMesh) {
+          loadModel(sceneName, 'mesh');
+        } else if (data.hasSplat) {
+          loadModel(sceneName, 'splat');
+        }
+      } catch (e) {}
+    }
+
+    function handleFileSelect(input) {
+      const file = input.files[0];
+      if (!file) return;
+      document.getElementById('dropzoneText').innerText = `UPLOADING: ${file.name.toUpperCase()}`;
+      
+      fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'X-File-Name': encodeURIComponent(file.name) },
+        body: file
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          document.getElementById('videoPathInput').value = data.path;
+          document.getElementById('dropzoneText').innerText = `LOADED: ${file.name.toUpperCase()}`;
+          const sceneName = file.name.split('.')[0];
+          checkExistingSceneAssets(sceneName);
+        }
+      })
+      .catch(err => alert("Upload error: " + err));
+    }
+
+    /* =============================================================
+       5. TELEMETRY & LOG STREAMING
+    ============================================================= */
+    function setProgress(stage, pct, text) {
+      document.getElementById(`bar${stage}`).style.width = pct + '%';
+      document.getElementById(`label${stage}`).innerText = text;
+    }
+
+    function appendLogs(lines) {
+      if (!lines || lines.length === 0) return;
+      const term = document.getElementById('termOutput');
+      const frag = document.createDocumentFragment();
+
+      lines.forEach(l => {
+        const div = document.createElement('div');
+        div.textContent = l;
+        frag.appendChild(div);
+      });
+
+      term.appendChild(frag);
+
+      while (term.childNodes.length > 500) {
+        term.removeChild(term.firstChild);
+      }
+
+      const drawer = document.getElementById('ttyDrawer');
+      if (!drawer.classList.contains('collapsed')) {
+        term.scrollTop = term.scrollHeight;
+      }
+    }
+
+    function evaluateSessionTelemetry(lines) {
+      if (!isSessionActive) return;
+
+      let sceneName = stageState.activeScene;
+      const vPath = document.getElementById('videoPathInput').value.trim();
+      if (vPath) {
+        const clean = vPath.replace(/[\\/]+$/, '');
+        sceneName = clean.split(/[\\/]/).pop().split('.')[0];
+        stageState.activeScene = sceneName;
+      }
+
+      let stage1Complete = false;
+      let stage2Complete = false;
+      let stage3Complete = false;
+      let stage4Complete = false;
+      let stage5Complete = false;
+      let allComplete = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+
+        if (l.includes("Unfinished pipeline run detected for:")) {
+          const p = l.split("Unfinished pipeline run detected for:")[1].trim();
+          document.getElementById('recoveryBanner').style.display = 'block';
+          document.getElementById('recoveryDetail').innerText = p;
+          document.getElementById('videoPathInput').value = p;
+        }
+
+        if (l.includes("Successfully extracted")) {
+          const m = l.match(/Successfully extracted (\d+) frames/);
+          if (m) {
+            totalExtractedFrames = parseInt(m[1]);
+            document.getElementById('telemetryFrames').innerText = totalExtractedFrames;
+          }
+          stage1Complete = true;
+        }
+        if (l.includes("SIFT_COMPLETE")) stage1Complete = true;
+
+        if (l.includes("Verified matches") || l.includes("MATCHING_COMPLETE")) stage2Complete = true;
+
+        if (l.includes("Keeping successful reconstruction") || l.includes("Skipping mapper") || l.includes("SPARSE_COMPLETE")) {
+          stage3Complete = true;
+        }
+
+        if (l.includes("GSPLAT training complete") || l.includes("Training Finished")) stage4Complete = true;
+
+        if (l.includes("Colored 3D model saved") || l.includes("colored.obj")) stage5Complete = true;
+
+        if (l.includes("=== Entire Pipeline Complete.")) allComplete = true;
+
+        if (l.includes("feature_extraction.cc") && l.includes("Processed file")) {
+          document.getElementById('liveSubstageTag').innerText = "1B. SIFT MATCHER";
+          const m = l.match(/Processed file \[(\d+)\/(\d+)\]/);
+          if (m && !stage1Complete) {
+            const pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
+            setProgress('Stage1', pct, `${pct}%`);
+          }
+        }
+
+        if (l.includes("Matching image [") || l.includes("Matching block [") || l.includes("pairing.cc")) {
+          document.getElementById('liveSubstageTag').innerText = "2. MATCHER PAIRING";
+          const m = l.match(/\[(\d+)\/(\d+)\]/);
+          if (m && !stage2Complete) {
+            const pct = Math.round((parseInt(m[1]) / parseInt(m[2])) * 100);
+            setProgress('Stage2', pct, `${pct}%`);
+          }
+        }
+
+        if (l.includes("Registering image #")) {
+          document.getElementById('liveSubstageTag').innerText = "3A. REGISTRATION";
+          const regMatch = l.match(/num_reg_frames=(\d+)/);
+          if (regMatch && !stage3Complete) {
+            const registered = parseInt(regMatch[1]);
+            const pct = totalExtractedFrames > 0 ? Math.min(100, Math.round((registered / totalExtractedFrames) * 100)) : 50;
+            setProgress('Stage3', pct, `${registered} frames`);
+          }
+        }
+
+        const ptMatch = l.match(/Image sees \d+ \/ (\d+) points/);
+        if (ptMatch) document.getElementById('telemetryPoints').innerText = ptMatch[1];
+
+        const gsplatMatch = l.match(/^(\d+)\s+\((\d+\.\d+)%\)/);
+        if (gsplatMatch && !stage4Complete) {
+          document.getElementById('liveSubstageTag').innerText = "4. SPLAT TRAINING";
+          setProgress('Stage4', parseFloat(gsplatMatch[2]), `${gsplatMatch[2]}%`);
+        }
+
+        if (l.includes("Now having")) {
+          const gm = l.match(/Now having (\d+) GSs/);
+          if (gm) document.getElementById('telemetryGaussians').innerText = parseInt(gm[1]).toLocaleString();
+        }
+
+        // Live Asset Viewport Transitions
+        if ((l.includes("Reading Gaussian pointcloud from") || l.includes("splat.ply")) && !stageState.splatLoaded && !stageState.meshLoaded) {
+          if (sceneName) loadModel(sceneName, 'splat');
+        }
+
+        if (l.includes("Colored 3D model saved") && !stageState.meshLoaded) {
+          clearCachedTransition();
+          if (sceneName) loadModel(sceneName, 'mesh');
+        }
+      }
+
+      // Cascade stage state progress
+      if (stage1Complete) setProgress('Stage1', 100, 'DONE');
+      if (stage2Complete) { setProgress('Stage1', 100, 'DONE'); setProgress('Stage2', 100, 'DONE'); }
+      if (stage3Complete) {
+        setProgress('Stage1', 100, 'DONE');
+        setProgress('Stage2', 100, 'DONE');
+        setProgress('Stage3', 100, 'DONE');
+        document.getElementById('labelStage3BA').innerText = 'CONVERGED';
+        document.getElementById('barStage3BA').style.width = '100%';
+      }
+      if (stage4Complete) {
+        setProgress('Stage1', 100, 'DONE');
+        setProgress('Stage2', 100, 'DONE');
+        setProgress('Stage3', 100, 'DONE');
+        setProgress('Stage4', 100, 'DONE');
+      }
+      if (stage5Complete || allComplete) {
+        ['Stage1', 'Stage2', 'Stage3', 'Stage4', 'Stage5'].forEach(s => setProgress(s, 100, 'DONE'));
+        document.getElementById('labelStage3BA').innerText = 'DONE';
+        document.getElementById('barStage3BA').style.width = '100%';
+        document.getElementById('liveSubstageTag').innerText = 'COMPLETE';
+        document.getElementById('telemetryStatus').innerText = 'COMPLETE';
+      }
+    }
+
+    async function pollLogs() {
+      try {
+        const res = await fetch(`/api/logs?cursor=${logCursor}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.lines && data.lines.length > 0) {
+            appendLogs(data.lines);
+            evaluateSessionTelemetry(data.lines);
+            logCursor = data.nextCursor;
+          }
+        }
+      } catch (e) {}
+
+      if (isPolling) setTimeout(pollLogs, 600);
+    }
+
+    async function updateStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const badge = document.getElementById('processStatusBadge');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        if (data.running) {
+          isSessionActive = true; // <-- Arm session telemetry if reconnected to a running job
+          badge.innerText = `RUNNING (PID ${data.pid})`;
+          badge.className = 'badge active';
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+          document.getElementById('telemetryStatus').innerText = 'PROCESSING';
+        } else {
+          badge.innerText = 'OFFLINE';
+          badge.className = 'badge';
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          if (!isSessionActive) {
+            document.getElementById('telemetryStatus').innerText = 'IDLE';
+          }
+        }
+      } catch(e) {}
+    }
+
+    /* =============================================================
+       6. ACTIONS
+    ============================================================= */
+    async function triggerStart() {
+      const path = document.getElementById('videoPathInput').value.trim();
+      if (!path) return alert("Please select or upload a video file first.");
+
+      isSessionActive = true; // <-- Arm session telemetry
+      resetTelemetryUI();
+      document.getElementById('termOutput').innerHTML = "";
+      logCursor = 0;
+
+      const sceneName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop().split('.')[0];
+      stageState.activeScene = sceneName;
+      checkExistingSceneAssets(sceneName);
+
+      await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', videoPath: path })
+      });
+    }
+
+    async function triggerResume() {
+      const path = document.getElementById('videoPathInput').value.trim();
+      const sceneName = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop().split('.')[0];
+      stageState.activeScene = sceneName;
+
+      await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resume', videoPath: path })
+      });
+      document.getElementById('recoveryBanner').style.display = 'none';
+    }
+
+    async function triggerStop() {
+      await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' })
+      });
+    }
+
+    function dismissRecovery() {
+      document.getElementById('recoveryBanner').style.display = 'none';
+    }
+
+    /* =============================================================
+       7. SPECIMEN LIBRARY
+    ============================================================= */
+    async function loadLibrary() {
+      try {
+        const res = await fetch('/api/scenes');
+        const manifest = await res.json();
+        const container = document.getElementById('galleryGrid');
+        container.innerHTML = "";
+        const items = Object.values(manifest);
+        if (items.length === 0) {
+          container.innerHTML = '<div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-mid)">NO SPECIMENS RECORDED.</div>';
+          return;
+        }
+        items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'gallery-card';
+          card.innerHTML = `
+            <h4>📹 ${item.name}</h4>
+            <div class="gallery-meta">
+              <div>STATUS: <strong style="color:var(--signal)">${item.status.toUpperCase()}</strong></div>
+              <div>SPARSE CLOUD: ${item.sparse_reconstructed ? 'AVAILABLE [✓]' : 'MISSING [×]'}</div>
+              <div>3D MESH: ${item.has_colored_mesh ? 'AVAILABLE [✓]' : 'MISSING [×]'}</div>
+              <div style="font-size:0.6rem; margin-top:2px; word-break:break-all;">PATH: ${item.scene_dir}</div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-warn" onclick="resumeFromLibrary('${item.video_path.replace(/\\/g, '\\\\')}')">Re-Run / Inspect</button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      } catch(e) {}
+    }
+
+    function resumeFromLibrary(vPath) {
+      switchTab('dashboard');
+      document.getElementById('videoPathInput').value = vPath;
+      const sceneName = vPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop().split('.')[0];
+      checkExistingSceneAssets(sceneName);
+    }
+
+    /* =============================================================
+      8. GESTURE ENGINE & ANIMATION LOOP (TRUE TURNTABLE ORBIT)
+    ============================================================= */
+    let isDragging = false;
+    let dragMode = 'orbit';
+    let lx = 0, ly = 0;
+
+    const orbitTarget = new THREE.Vector3(0, 0, 0);
+    let spherical = {
+      radius: 4.0,
+      theta: 0,                           // Azimuthal horizontal angle
+      phi: Math.PI / 2.2                  // Elevation angle (slightly above horizon)
+    };
+
+    function updateCameraFromSpherical() {
+      // Clamp elevation angle to prevent crossing the poles (never flips upside down)
+      spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, spherical.phi));
+      spherical.radius = Math.max(0.2, Math.min(50, spherical.radius));
+
+      camera.position.x = orbitTarget.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+      camera.position.y = orbitTarget.y + spherical.radius * Math.cos(spherical.phi);
+      camera.position.z = orbitTarget.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+
+      camera.lookAt(orbitTarget);
+    }
+    updateCameraFromSpherical();
+
+    stage.addEventListener('contextmenu', e => e.preventDefault());
+
+    stage.addEventListener('mousedown', e => {
+      isDragging = true;
+      lx = e.clientX;
+      ly = e.clientY;
+      dragMode = (e.button === 2 || (e.button === 0 && e.shiftKey)) ? 'pan' : 'orbit';
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    window.addEventListener('mousemove', e => {
+      if (!isDragging) return;
+      const dx = e.clientX - lx;
+      const dy = e.clientY - ly;
+
+      if (dragMode === 'orbit') {
+        // Natural Turntable Orbit:
+        // Drag Left  (dx < 0) -> theta increases -> camera moves right -> model turns LEFT
+        // Drag Right (dx > 0) -> theta decreases -> camera moves left  -> model turns RIGHT
+        // Drag Up    (dy < 0) -> phi decreases   -> camera moves up    -> looks from ABOVE
+        // Drag Down  (dy > 0) -> phi increases   -> camera moves down  -> looks from BELOW
+        spherical.theta += dx * 0.007;
+        spherical.phi   -= dy * 0.007;
+        updateCameraFromSpherical();
+      } else {
+        // Panning aligned with camera viewport axes
+        const panFactor = 0.0012 * spherical.radius;
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+        const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+        orbitTarget.addScaledVector(right, -dx * panFactor);
+        orbitTarget.addScaledVector(up, dy * panFactor);
+        updateCameraFromSpherical();
+      }
+
+      lx = e.clientX;
+      ly = e.clientY;
+    });
+
+    stage.addEventListener('wheel', e => {
+      e.preventDefault();
+      spherical.radius += e.deltaY * 0.003;
+      updateCameraFromSpherical();
+    }, { passive: false });
+
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      if (!isDragging && isAutoSpinning) {
+        spherical.theta += 0.0018; // Smooth horizontal rotation
+        updateCameraFromSpherical();
+      }
+      renderer.render(scene, camera);
+    }
+    renderLoop();
+
+    setTimeout(resizeViewport, 100);
+    setInterval(updateStatus, 1000);
+    fetchConfiguration();
+    pollLogs();
+  </script>
+</body>
+</html>

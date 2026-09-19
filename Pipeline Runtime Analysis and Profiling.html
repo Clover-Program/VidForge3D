@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Multi-Session Master Tracker & Deep Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-base: #0a0c10;
+            --bg-panel: #11141c;
+            --bg-card: #181c26;
+            --border: #232a3b;
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.25);
+            --text-main: #f1f5f9;
+            --text-muted: #64748b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --purple: #c084fc;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            margin: 0;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 6px;
+            margin-bottom: 6px;
+            flex-shrink: 0;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            background-color: var(--accent);
+            color: #041017;
+            font-weight: 700;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: none;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            user-select: none;
+        }
+
+        .btn-sec {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        input[type="file"] { display: none; }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        
+        .speed-control input { 
+            width: 280px; 
+            accent-color: var(--accent); 
+            cursor: pointer;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 270px 380px 1fr;
+            gap: 8px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .sidebar {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 6px 10px;
+            background: #0d1017;
+            border-bottom: 1px solid var(--border);
+            font-size: 10px;
+            font-weight: bold;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .asset-list, .session-list {
+            overflow-y: auto;
+            padding: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .asset-list { max-height: 180px; border-bottom: 1px solid var(--border); }
+        .session-list { flex: 1; }
+
+        .session-card, .asset-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 6px 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .session-card:hover, .asset-card:hover { background: #202634; }
+        .session-card.active-run { border-left: 3px solid var(--accent); }
+        .session-card.selected { background: #242c3d; border-color: var(--accent); }
+
+        .session-card-title, .asset-card-title {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .session-meta, .asset-meta {
+            font-size: 9.5px;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .stage-inspector {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .card {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .card-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .header-badges {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .time-badge {
+            font-size: 9.5px;
+            color: #94a3b8;
+            font-family: Consolas, monospace;
+            background: rgba(148, 163, 184, 0.12);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+
+        .substage-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            background: #090b10;
+            padding: 5px 7px;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+
+        .substage-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .substage-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9.5px;
+            color: var(--text-muted);
+        }
+
+        .substage-timer {
+            color: #38bdf8;
+            font-family: Consolas, monospace;
+            margin-left: 4px;
+        }
+
+        .status-badge {
+            font-size: 8.5px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-badge.active { background: var(--accent-glow); color: var(--accent); }
+        .status-badge.done { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+        .status-badge.fail { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .status-badge.interrupted { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .status-badge.skip { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+
+        .progress-track {
+            height: 4px;
+            background: #06080b;
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.05s ease-out;
+        }
+        .progress-bar.fail { background: var(--danger); }
+        .progress-bar.done { background: var(--success); }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+        }
+
+        .stat-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 4px 6px;
+            border-radius: 4px;
+        }
+
+        .stat-box .title { font-size: 8.5px; color: var(--text-muted); text-transform: uppercase; }
+        .stat-box .value { font-size: 10px; font-weight: bold; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .analytics-terminal-container {
+            display: grid;
+            grid-template-rows: 250px 1fr;
+            gap: 8px;
+            min-height: 0;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(210px, 1fr));
+            gap: 6px;
+            min-height: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 4px;
+        }
+
+        .chart-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            position: relative;
+        }
+
+        .chart-header {
+            font-size: 9.5px;
+            font-weight: bold;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            white-space: nowrap;
+        }
+
+        .chart-wrapper {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        .terminal-panel {
+            background: #040507;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .terminal-screen {
+            flex: 1;
+            padding: 8px;
+            margin: 0;
+            overflow-y: auto;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 10.5px;
+            line-height: 1.35;
+            color: #d1d5db;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .term-line.info { color: #93c5fd; }
+        .term-line.error { color: #f87171; font-weight: bold; }
+        .term-line.warning { color: #fde047; }
+        .term-line.progress { color: #34d399; }
+        .term-line.reset { color: #c084fc; font-weight: bold; border-top: 1px dashed #7e22ce; padding-top: 2px; margin-top: 2px; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div>
+            <h3 style="margin: 0; font-size: 13px;">Pipeline Multi-Session Master Tracker & Deep Analytics</h3>
+            <span style="font-size: 10.5px; color: var(--text-muted);" id="fileStats">Upload a log file to run historical multi-session analysis</span>
+        </div>
+        <div class="controls">
+            <div class="speed-control">
+                <span>Speed: <strong id="speedVal">50</strong> l/s</span>
+                <input type="range" id="speedSlider" min="1" max="10000" value="50">
+            </div>
+            <label class="btn">
+                Load Log
+                <input type="file" id="fileInput" accept=".log,.txt">
+            </label>
+            <button class="btn btn-sec" id="playBtn" disabled onclick="togglePlayback()">Play</button>
+            <button class="btn btn-sec" id="resetBtn" disabled onclick="resetAll()">Reset</button>
+        </div>
+    </div>
+
+    <div class="workspace">
+        <div class="sidebar">
+            <div class="panel-header">
+                <span>Asset Recovery Matrix</span>
+                <span id="assetCounter">0 Videos</span>
+            </div>
+            <div class="asset-list" id="assetMatrixList">
+                <div style="padding: 12px; font-size: 9.5px; color: var(--text-muted); text-align: center;">No video runs processed.</div>
+            </div>
+            <div class="panel-header">
+                <span>Session Ledger</span>
+                <span id="sessionCounter">0 Total</span>
+            </div>
+            <div class="session-list" id="sessionList"></div>
+        </div>
+
+        <div class="stage-inspector">
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Global Log File Progress</span>
+                    <span id="logLinesProgress">0 / 0 Lines</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-bar" id="globalLogBar"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header-bar">
+                    <span id="currentSessionLabel">Active Session Monitor</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="sessionTimeBadge">00:00</span>
+                        <span class="status-badge" id="sessionStatusBadge">STANDBY</span>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="title">Video Target</div>
+                        <div class="value" id="statVideoTarget">--</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="title">Status Detail</div>
+                        <div class="value" id="statCrashDiag" style="color: var(--text-main);">None</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 1 -->
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Stage 1: Frames & SIFT</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="timeStage1">--</span>
+                        <span class="status-badge" id="badgeStage1">PENDING</span>
+                    </div>
+                </div>
+                <div class="substage-container">
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>1A. Frame Extraction<span class="substage-timer" id="timeExtract"></span></span>
+                            <span id="substageExtractVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barExtract"></div></div>
+                    </div>
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>1B. SIFT Extraction<span class="substage-timer" id="timeSift"></span></span>
+                            <span id="substageSiftVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barSift"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 2 -->
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Stage 2: Feature Matching</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="timeStage2">--</span>
+                        <span class="status-badge" id="badgeStage2">PENDING</span>
+                    </div>
+                </div>
+                <div class="substage-container">
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>Sequential Matcher & Pair Verification<span class="substage-timer" id="timeMatch"></span></span>
+                            <span id="substageMatchVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barMatch"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 3 -->
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Stage 3: Sparse Mapper</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="timeStage3">--</span>
+                        <span class="status-badge" id="badgeStage3">PENDING</span>
+                    </div>
+                </div>
+                <div class="substage-container">
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>Incremental Image Registration<span class="substage-timer" id="timeMapper"></span></span>
+                            <span id="substageMapperVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barMapper"></div></div>
+                    </div>
+                    <div class="stats-grid" style="margin-top: 3px;">
+                        <div class="stat-box">
+                            <div class="title">Active Solver</div>
+                            <div class="value" id="statSolver">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title">Points Reconstructed</div>
+                            <div class="value" id="statPoints">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 4 -->
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Stage 4: 3D Gaussian Splatting</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="timeStage4">--</span>
+                        <span class="status-badge" id="badgeStage4">PENDING</span>
+                    </div>
+                </div>
+                <div class="substage-container">
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>4A. Splatfacto Trainer<span class="substage-timer" id="timeGsplat"></span></span>
+                            <span id="substageTrainVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barGsplat"></div></div>
+                    </div>
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>4B. PLY Export & Poisson Meshing<span class="substage-timer" id="timeGsplatMesh"></span></span>
+                            <span id="substageMeshVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barGsplatMesh"></div></div>
+                    </div>
+                    <div class="stats-grid" style="margin-top: 3px;">
+                        <div class="stat-box">
+                            <div class="title">Active Gaussians</div>
+                            <div class="value" id="statGaussCount">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="title">Iteration ETA</div>
+                            <div class="value" id="statTrainEta">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 5 -->
+            <div class="card">
+                <div class="card-header-bar">
+                    <span>Stage 5: Traditional MVS (Optional)</span>
+                    <div class="header-badges">
+                        <span class="time-badge" id="timeStage5">--</span>
+                        <span class="status-badge" id="badgeStage5">PENDING</span>
+                    </div>
+                </div>
+                <div class="substage-container">
+                    <div class="substage-row">
+                        <div class="substage-info">
+                            <span>PatchMatch Stereo & Dense Fusion<span class="substage-timer" id="timeMvs"></span></span>
+                            <span id="substageMvsVal">--</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-bar" id="barMvs"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Right Column: Complete Analytics Grid & Terminal -->
+        <div class="analytics-terminal-container">
+            <div class="charts-row">
+                <!-- Chart 1: Video Cache Recovery Success vs Failures -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span>Video Cache Recovery</span>
+                        <span id="chartVideoStats">0 Hits / 0 Misses</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="videoRecoveryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Stage Resumption Pass vs Fail -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span>Stage Resume Pass vs Fail</span>
+                        <span>Cached vs Failed</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="stageResumeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Substage Duration vs Frame Scaling -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span>Substage Time vs Frames</span>
+                        <span>Secs / Frames</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="stageTimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 4: Logged Failures vs Interrupted vs Potential Modes -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span>Errors vs Vulnerabilities</span>
+                        <span>Logged / Interrupted / Potential</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="errorDistChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 5: Training ETA Accuracy & Real Drift -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <span>ETA Accuracy / Drift</span>
+                        <span>Projected vs Real</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="etaDriftChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="terminal-panel">
+                <div class="panel-header">
+                    <span>STDOUT STREAM</span>
+                    <span id="termStatus">IDLE</span>
+                </div>
+                <pre class="terminal-screen" id="terminalOutput"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allLines = [];
+        let currentIndex = 0;
+        let isPlaying = false;
+        let playInterval = null;
+        let linesPerSecond = 50;
+
+        let sessions = [];
+        let currentSession = null;
+        let displayedSessionIndex = null;
+        let videoAssetMatrix = {};
+
+        const STAGE_ERROR_MODES = {
+            "Extraction": ["FFmpeg Missing", "Unsupported Video Codec", "Invalid Input Path"],
+            "SIFT": ["CUDA SIFT Init Fail", "Out of Memory", "Corrupt JPEG"],
+            "Matching": ["No Overlap Found", "Corrupt DB Geometry"],
+            "Mapper": ["Caspar Unsupported", "CHOLMOD Matrix Err", "Eigen Factorization Fail", "No Initial Pair Found"],
+            "GSplat": ["CUDA OOM", "Ninja Missing", "MSVC Preprocessor Syntax", "Clang Flag Leak", "Unbound Variable"],
+            "Dense/Mesh": ["Filtering Disabled", "Access Violation (0xC0000005)", "Depth Map Discard"]
+        };
+
+        const loggedCrashes = { "Extraction": 0, "SIFT": 0, "Matching": 0, "Mapper": 0, "GSplat": 0, "Dense/Mesh": 0 };
+        const silentInterruptions = { "Extraction": 0, "SIFT": 0, "Matching": 0, "Mapper": 0, "GSplat": 0, "Dense/Mesh": 0 };
+
+        let videoRecoveryChart, stageResumeChart, stageTimeChart, errorDistChart, etaDriftChart;
+
+        function initCharts() {
+            const chartDefaults = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8', font: { size: 8 }, boxWidth: 7 } }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 7.5 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 7.5 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
+                }
+            };
+
+            // Chart 1: Video Cache Recovery
+            const ctx1 = document.getElementById('videoRecoveryChart').getContext('2d');
+            videoRecoveryChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Cache Resumed', data: [], backgroundColor: '#10b981' },
+                        { label: 'Failed/Recomputed', data: [], backgroundColor: '#ef4444' }
+                    ]
+                },
+                options: chartDefaults
+            });
+
+            // Chart 2: Stage Resume Pass vs Fail
+            const ctx2 = document.getElementById('stageResumeChart').getContext('2d');
+            stageResumeChart = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: ["Frames", "SIFT", "Matches", "Sparse"],
+                    datasets: [
+                        { label: 'Resumed (Cache Hit)', data: [0, 0, 0, 0], backgroundColor: '#10b981' },
+                        { label: 'Failed to Resume', data: [0, 0, 0, 0], backgroundColor: '#f43f5e' }
+                    ]
+                },
+                options: chartDefaults
+            });
+
+            // Chart 3: Substage Time vs Frames (All 6 stages)
+            const ctx3 = document.getElementById('stageTimeChart').getContext('2d');
+            stageTimeChart = new Chart(ctx3, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        { label: '1A. Extract', data: [], backgroundColor: '#38bdf8' },
+                        { label: '1B. SIFT', data: [], backgroundColor: '#34d399' },
+                        { label: '2. Match', data: [], backgroundColor: '#facc15' },
+                        { label: '3. Mapper', data: [], backgroundColor: '#c084fc' },
+                        { label: '4A. GSplat', data: [], backgroundColor: '#f97316' },
+                        { label: '5. MVS', data: [], backgroundColor: '#ec4899' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8', font: { size: 7.5 }, boxWidth: 6 } }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            ticks: { color: '#94a3b8', font: { size: 7.5 } },
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: { display: true, text: 'Frames', color: '#94a3b8', font: { size: 8 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            ticks: { color: '#94a3b8', font: { size: 7.5 } },
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            title: { display: true, text: 'Seconds', color: '#94a3b8', font: { size: 8 } }
+                        }
+                    }
+                }
+            });
+
+            // Chart 4: Grouped bar chart (Crashes vs Silent Interruptions vs Potential Modes)
+            const ctx4 = document.getElementById('errorDistChart').getContext('2d');
+            errorDistChart = new Chart(ctx4, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(STAGE_ERROR_MODES),
+                    datasets: [
+                        {
+                            label: 'Logged Crash',
+                            data: Object.values(loggedCrashes),
+                            backgroundColor: '#ef4444'
+                        },
+                        {
+                            label: 'Silent Interruption',
+                            data: Object.values(silentInterruptions),
+                            backgroundColor: '#f59e0b'
+                        },
+                        {
+                            label: 'Potential Types',
+                            data: Object.values(STAGE_ERROR_MODES).map(arr => arr.length),
+                            backgroundColor: '#334155'
+                        }
+                    ]
+                },
+                options: chartDefaults
+            });
+
+            // Chart 5: ETA Accuracy Drift
+            const ctx5 = document.getElementById('etaDriftChart').getContext('2d');
+            etaDriftChart = new Chart(ctx5, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Projected ETA (s)', data: [], borderColor: '#f59e0b', tension: 0.2, pointRadius: 1 },
+                        { label: 'Actual Remaining (s)', data: [], borderColor: '#10b981', tension: 0.2, pointRadius: 1 }
+                    ]
+                },
+                options: chartDefaults
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', initCharts);
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                allLines = evt.target.result.split(/\r?\n/);
+                document.getElementById('fileStats').innerText = `${file.name} (${allLines.length.toLocaleString()} lines)`;
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('resetBtn').disabled = false;
+                resetAll();
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('speedSlider').addEventListener('input', function(e) {
+            linesPerSecond = parseInt(e.target.value);
+            document.getElementById('speedVal').innerText = linesPerSecond.toLocaleString();
+            if (isPlaying) {
+                pauseSimulation();
+                startSimulation();
+            }
+        });
+
+        function togglePlayback() {
+            if (isPlaying) pauseSimulation();
+            else startSimulation();
+        }
+
+        function startSimulation() {
+            if (currentIndex >= allLines.length) return;
+            isPlaying = true;
+            document.getElementById('playBtn').innerText = "Pause";
+            document.getElementById('termStatus').innerText = "RUNNING";
+            
+            const tickRateMs = 20; 
+            playInterval = setInterval(() => {
+                const batchSize = Math.max(1, Math.round((linesPerSecond * tickRateMs) / 1000));
+                processNextBatch(batchSize);
+            }, tickRateMs);
+        }
+
+        function pauseSimulation() {
+            isPlaying = false;
+            clearInterval(playInterval);
+            document.getElementById('playBtn').innerText = "Play";
+            document.getElementById('termStatus').innerText = "PAUSED";
+        }
+
+        function resetAll() {
+            pauseSimulation();
+            currentIndex = 0;
+            sessions = [];
+            currentSession = null;
+            displayedSessionIndex = null;
+            videoAssetMatrix = {};
+
+            document.getElementById('terminalOutput').textContent = "";
+            document.getElementById('sessionList').innerHTML = "";
+            document.getElementById('assetMatrixList').innerHTML = '<div style="padding: 12px; font-size: 9.5px; color: var(--text-muted); text-align: center;">No video runs processed.</div>';
+            document.getElementById('sessionCounter').innerText = "0 Total";
+            document.getElementById('assetCounter').innerText = "0 Videos";
+
+            Object.keys(loggedCrashes).forEach(k => loggedCrashes[k] = 0);
+            Object.keys(silentInterruptions).forEach(k => silentInterruptions[k] = 0);
+
+            if (videoRecoveryChart) {
+                videoRecoveryChart.data.labels = [];
+                videoRecoveryChart.data.datasets[0].data = [];
+                videoRecoveryChart.data.datasets[1].data = [];
+                videoRecoveryChart.update();
+            }
+            if (stageResumeChart) {
+                stageResumeChart.data.datasets[0].data = [0, 0, 0, 0];
+                stageResumeChart.data.datasets[1].data = [0, 0, 0, 0];
+                stageResumeChart.update();
+            }
+            if (stageTimeChart) {
+                stageTimeChart.data.datasets.forEach(ds => ds.data = []);
+                stageTimeChart.update();
+            }
+            if (errorDistChart) {
+                errorDistChart.data.datasets[0].data = Object.values(loggedCrashes);
+                errorDistChart.data.datasets[1].data = Object.values(silentInterruptions);
+                errorDistChart.update();
+            }
+            if (etaDriftChart) {
+                etaDriftChart.data.labels = [];
+                etaDriftChart.data.datasets[0].data = [];
+                etaDriftChart.data.datasets[1].data = [];
+                etaDriftChart.update();
+            }
+
+            updateGlobalProgressBar();
+            resetStageUI();
+        }
+
+        function createStageTimerObj() {
+            return {
+                status: "PENDING",
+                percent: 0,
+                detail: "--",
+                startTime: null,
+                endTime: null,
+                elapsedMs: 0
+            };
+        }
+
+        function createNewSession(lineIndex) {
+            if (currentSession && currentSession.status === "RUNNING") {
+                finalizeSessionState(currentSession, "INTERRUPTED", null);
+            }
+
+            const newSession = {
+                id: sessions.length + 1,
+                startLine: lineIndex,
+                video: "Unknown",
+                status: "RUNNING",
+                crashReason: null,
+                failedStageKey: null,
+                lastCompletedStage: "None",
+                lastAttemptedStage: "Booting",
+                totalFrames: 0,
+                siftProcessed: 0,
+                matchedPairs: 0,
+                registeredImages: 0,
+                solver: "--",
+                points: "--",
+                gsplatIterations: 0,
+                gsplatEta: "--",
+                gaussians: "--",
+                mvsViews: 0,
+                mvsTotal: 0,
+                startTime: null,
+                endTime: null,
+                elapsedMs: 0,
+                lastStepNum: 0,
+                trainingSamples: [],
+                stageTimers: {
+                    stage1: { startTime: null, endTime: null, elapsedMs: 0 },
+                    stage2: { startTime: null, endTime: null, elapsedMs: 0 },
+                    stage3: { startTime: null, endTime: null, elapsedMs: 0 },
+                    stage4: { startTime: null, endTime: null, elapsedMs: 0 },
+                    stage5: { startTime: null, endTime: null, elapsedMs: 0 }
+                },
+                stages: {
+                    s1_extract: createStageTimerObj(),
+                    s1_sift:    createStageTimerObj(),
+                    s2_match:   createStageTimerObj(),
+                    s3_mapper:  createStageTimerObj(),
+                    s4_train:   createStageTimerObj(),
+                    s4_mesh:    createStageTimerObj(),
+                    s5_mvs:     createStageTimerObj()
+                }
+            };
+
+            sessions.push(newSession);
+            currentSession = newSession;
+            displayedSessionIndex = sessions.length - 1;
+            renderSessionList();
+        }
+
+        function registerVideoToMatrix(videoName) {
+            if (!videoAssetMatrix[videoName]) {
+                videoAssetMatrix[videoName] = {
+                    name: videoName,
+                    sessionHistory: [],
+                    lastAbandonedStage: "None",
+                    lastCompletedStage: "None",
+                    recoverySuccessCount: 0,
+                    recoveryFailureCount: 0
+                };
+            }
+            const asset = videoAssetMatrix[videoName];
+            if (!asset.sessionHistory.includes(currentSession.id)) {
+                asset.sessionHistory.push(currentSession.id);
+            }
+            renderAssetMatrixUI();
+        }
+
+        function mapAttemptToErrorKey(attemptStage) {
+            if (attemptStage.includes("Extraction")) return "Extraction";
+            if (attemptStage.includes("SIFT")) return "SIFT";
+            if (attemptStage.includes("Matching")) return "Matching";
+            if (attemptStage.includes("Mapper")) return "Mapper";
+            if (attemptStage.includes("Training") || attemptStage.includes("Meshing")) return "GSplat";
+            if (attemptStage.includes("Dense")) return "Dense/Mesh";
+            return null;
+        }
+
+        function finalizeSessionState(session, finalStatus, explicitCrashKey) {
+            session.status = finalStatus;
+
+            let lastDone = "None";
+            let lastAttempt = "1A. Extraction";
+
+            if (session.stages.s1_extract.status === "DONE" || session.stages.s1_extract.status === "SKIPPED") {
+                lastDone = "1A. Extraction";
+                lastAttempt = "1B. SIFT";
+            }
+            if (session.stages.s1_sift.status === "DONE" || session.stages.s1_sift.status === "SKIPPED") {
+                lastDone = "1B. SIFT";
+                lastAttempt = "2. Matching";
+            }
+            if (session.stages.s2_match.status === "DONE" || session.stages.s2_match.status === "SKIPPED") {
+                lastDone = "2. Matching";
+                lastAttempt = "3. Mapper";
+            }
+            if (session.stages.s3_mapper.status === "DONE" || session.stages.s3_mapper.status === "SKIPPED") {
+                lastDone = "3. Mapper";
+                lastAttempt = "4A. Training";
+            }
+            if (session.stages.s4_train.status === "DONE") {
+                lastDone = "4A. Training";
+                lastAttempt = "4B. Meshing";
+            }
+            if (session.stages.s4_mesh.status === "DONE") {
+                lastDone = "4B. Meshing";
+                lastAttempt = "5. Dense MVS";
+            }
+            if (session.stages.s5_mvs.status === "DONE") {
+                lastDone = "5. Dense MVS";
+                lastAttempt = "Completed";
+            }
+
+            session.lastCompletedStage = lastDone;
+            session.lastAttemptedStage = lastAttempt;
+
+            if (session.video && session.video !== "Unknown" && videoAssetMatrix[session.video]) {
+                const asset = videoAssetMatrix[session.video];
+                asset.lastCompletedStage = lastDone;
+                if (finalStatus !== "COMPLETED") asset.lastAbandonedStage = lastAttempt;
+            }
+
+            if (finalStatus === "CRASHED") {
+                const key = explicitCrashKey || mapAttemptToErrorKey(lastAttempt);
+                if (key && loggedCrashes[key] !== undefined) {
+                    loggedCrashes[key]++;
+                }
+            } else if (finalStatus === "INTERRUPTED") {
+                const key = mapAttemptToErrorKey(lastAttempt);
+                if (key && silentInterruptions[key] !== undefined) {
+                    silentInterruptions[key]++;
+                }
+            }
+
+            if (errorDistChart) {
+                errorDistChart.data.datasets[0].data = Object.values(loggedCrashes);
+                errorDistChart.data.datasets[1].data = Object.values(silentInterruptions);
+                errorDistChart.update();
+            }
+
+            pushSessionMetricsToCharts(session);
+            renderAssetMatrixUI();
+            renderSessionList();
+        }
+
+        function pushSessionMetricsToCharts(s) {
+            let f = s.totalFrames;
+            if ((!f || f <= 0) && s.video && videoAssetMatrix[s.video]) {
+                const parentAsset = videoAssetMatrix[s.video];
+                for (let sid of parentAsset.sessionHistory) {
+                    if (sessions[sid - 1] && sessions[sid - 1].totalFrames > 0) {
+                        f = sessions[sid - 1].totalFrames;
+                        s.totalFrames = f;
+                        break;
+                    }
+                }
+            }
+
+            if (stageTimeChart && f > 0) {
+                if (s.stages.s1_extract.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[0].data.push({ x: f, y: +(s.stages.s1_extract.elapsedMs / 1000).toFixed(1) });
+                }
+                if (s.stages.s1_sift.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[1].data.push({ x: f, y: +(s.stages.s1_sift.elapsedMs / 1000).toFixed(1) });
+                }
+                if (s.stages.s2_match.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[2].data.push({ x: f, y: +(s.stages.s2_match.elapsedMs / 1000).toFixed(1) });
+                }
+                if (s.stages.s3_mapper.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[3].data.push({ x: f, y: +(s.stages.s3_mapper.elapsedMs / 1000).toFixed(1) });
+                }
+                if (s.stages.s4_train.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[4].data.push({ x: f, y: +(s.stages.s4_train.elapsedMs / 1000).toFixed(1) });
+                }
+                if (s.stages.s5_mvs.elapsedMs > 0) {
+                    stageTimeChart.data.datasets[5].data.push({ x: f, y: +(s.stages.s5_mvs.elapsedMs / 1000).toFixed(1) });
+                }
+                stageTimeChart.update();
+            }
+
+            // Fixed ETA Accuracy Calculation
+            if (etaDriftChart && s.trainingSamples.length > 2) {
+                const samples = s.trainingSamples;
+                const finalElapsedSec = s.stages.s4_train.elapsedMs / 1000;
+
+                etaDriftChart.data.labels = [];
+                etaDriftChart.data.datasets[0].data = [];
+                etaDriftChart.data.datasets[1].data = [];
+
+                samples.forEach((sample) => {
+                    const actualRemainingSec = Math.max(0, Math.round(finalElapsedSec - sample.simElapsedSec));
+                    etaDriftChart.data.labels.push(`${sample.pct}%`);
+                    etaDriftChart.data.datasets[0].data.push(sample.predictedEta);
+                    etaDriftChart.data.datasets[1].data.push(actualRemainingSec);
+                });
+
+                etaDriftChart.update();
+            }
+        }
+
+        function updateCacheCharts() {
+            if (videoRecoveryChart) {
+                const videoKeys = Object.keys(videoAssetMatrix);
+                videoRecoveryChart.data.labels = videoKeys;
+                videoRecoveryChart.data.datasets[0].data = videoKeys.map(k => videoAssetMatrix[k].recoverySuccessCount);
+                videoRecoveryChart.data.datasets[1].data = videoKeys.map(k => videoAssetMatrix[k].recoveryFailureCount);
+                videoRecoveryChart.update();
+
+                let totalHits = 0, totalMisses = 0;
+                videoKeys.forEach(k => {
+                    totalHits += videoAssetMatrix[k].recoverySuccessCount;
+                    totalMisses += videoAssetMatrix[k].recoveryFailureCount;
+                });
+                document.getElementById('chartVideoStats').innerText = `${totalHits} Hits / ${totalMisses} Misses`;
+            }
+        }
+
+        function recordStageResumption(stageIndex, isSuccess) {
+            if (stageResumeChart) {
+                if (isSuccess) {
+                    stageResumeChart.data.datasets[0].data[stageIndex]++;
+                } else {
+                    stageResumeChart.data.datasets[1].data[stageIndex]++;
+                }
+                stageResumeChart.update();
+            }
+        }
+
+        function renderAssetMatrixUI() {
+            const container = document.getElementById('assetMatrixList');
+            container.innerHTML = "";
+            const keys = Object.keys(videoAssetMatrix);
+            document.getElementById('assetCounter').innerText = `${keys.length} Videos`;
+
+            keys.forEach(k => {
+                const asset = videoAssetMatrix[k];
+                const card = document.createElement('div');
+                card.className = "asset-card";
+
+                card.innerHTML = `
+                    <div class="asset-card-title">
+                        <span>📹 ${asset.name}</span>
+                        <span class="status-badge active">${asset.sessionHistory.length} Runs</span>
+                    </div>
+                    <div class="asset-meta">
+                        <span>Last Completed: <strong style="color:var(--success)">${asset.lastCompletedStage}</strong></span>
+                        ${asset.lastAbandonedStage !== "None" ? `<span>Last Abandoned: <strong style="color:var(--danger)">${asset.lastAbandonedStage}</strong></span>` : ''}
+                        <span>Recovery Hits: <strong>${asset.recoverySuccessCount}</strong> | Fails: <strong>${asset.recoveryFailureCount}</strong></span>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            updateCacheCharts();
+        }
+
+        function renderSessionList() {
+            const container = document.getElementById('sessionList');
+            container.innerHTML = "";
+            document.getElementById('sessionCounter').innerText = `${sessions.length} Total`;
+
+            sessions.forEach((s, idx) => {
+                const card = document.createElement('div');
+                card.className = `session-card ${s === currentSession ? 'active-run' : ''} ${idx === displayedSessionIndex ? 'selected' : ''}`;
+                card.onclick = () => inspectSession(idx);
+
+                let badgeClass = "active";
+                if (s.status === "COMPLETED") badgeClass = "done";
+                else if (s.status === "CRASHED") badgeClass = "fail";
+                else if (s.status === "INTERRUPTED") badgeClass = "interrupted";
+
+                card.innerHTML = `
+                    <div class="session-card-title">
+                        <span>#${s.id} ${s.video}</span>
+                        <span class="status-badge ${badgeClass}">${s.status}</span>
+                    </div>
+                    <div class="session-meta">
+                        <span>Duration: <strong>${formatDuration(s.elapsedMs)}</strong> | Completed: ${s.lastCompletedStage}</span>
+                        <span>Frames: ${s.totalFrames || '--'} | Gaussians: ${s.gaussians}</span>
+                        ${s.crashReason ? `<span style="color:var(--danger)">Crash: ${s.crashReason}</span>` : ''}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function inspectSession(index) {
+            displayedSessionIndex = index;
+            renderSessionList();
+            renderSessionDataToUI(sessions[index]);
+        }
+
+        function cleanAnsi(str) {
+            return str.replace(/\\u001b\[[0-9;]*[a-zA-Z]/g, '').replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '').trim();
+        }
+
+        function processNextBatch(count) {
+            const term = document.getElementById('terminalOutput');
+            let fragment = document.createDocumentFragment();
+
+            const throttleDom = count > 80;
+            const skipStep = throttleDom ? Math.ceil(count / 40) : 1;
+
+            for (let i = 0; i < count && currentIndex < allLines.length; i++, currentIndex++) {
+                const raw = allLines[currentIndex];
+                const clean = cleanAnsi(raw);
+                if (!clean) continue;
+
+                analyzeLine(clean, currentIndex);
+
+                if (!throttleDom || (i % skipStep === 0) || i === count - 1) {
+                    const span = document.createElement('div');
+                    span.className = 'term-line';
+                    if (clean.includes("=== Reconstruction Program Started ===")) span.classList.add('reset');
+                    else if (clean.includes('[ERROR]') || clean.includes('CRITICAL') || clean.includes('Traceback') || clean.includes('FAILED:')) span.classList.add('error');
+                    else if (clean.includes('[WARNING]') || clean.includes('UserWarning')) span.classList.add('warning');
+                    else if (/^\d+\s+\(\d+\.\d+%\)/.test(clean)) span.classList.add('progress');
+                    else span.classList.add('info');
+
+                    span.textContent = clean;
+                    fragment.appendChild(span);
+                }
+            }
+
+            term.appendChild(fragment);
+            if (term.childNodes.length > 250) {
+                while (term.childNodes.length > 150) term.removeChild(term.firstChild);
+            }
+            term.scrollTop = term.scrollHeight;
+
+            updateGlobalProgressBar();
+
+            if (displayedSessionIndex === sessions.length - 1 && currentSession) {
+                renderSessionDataToUI(currentSession);
+            }
+
+            if (currentIndex >= allLines.length) {
+                pauseSimulation();
+                document.getElementById('termStatus').innerText = "END OF LOG";
+                if (currentSession && currentSession.status === "RUNNING") {
+                    finalizeSessionState(currentSession, "COMPLETED", null);
+                }
+            }
+        }
+
+        function updateGlobalProgressBar() {
+            const pct = allLines.length > 0 ? ((currentIndex / allLines.length) * 100).toFixed(1) : 0;
+            document.getElementById('globalLogBar').style.width = pct + "%";
+            document.getElementById('logLinesProgress').innerText = `${currentIndex.toLocaleString()} / ${allLines.length.toLocaleString()} Lines (${pct}%)`;
+        }
+
+        function updateStageClock(subObj, masterTimerObj, ts) {
+            if (!ts) return;
+            if (!subObj.startTime) subObj.startTime = ts;
+            subObj.endTime = ts;
+            subObj.elapsedMs = Math.max(0, subObj.endTime - subObj.startTime);
+
+            if (!masterTimerObj.startTime) masterTimerObj.startTime = ts;
+            masterTimerObj.endTime = ts;
+            masterTimerObj.elapsedMs = Math.max(0, masterTimerObj.endTime - masterTimerObj.startTime);
+        }
+
+        function extractTimestamp(line) {
+            let m = line.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})[,\.](\d{3})/);
+            if (m) {
+                return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}Z`).getTime();
+            }
+            m = line.match(/(?:^|\[[a-zA-Z0-9_-]+\]\s*)[IWEF](\d{4})(\d{2})(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+            if (m) {
+                return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}Z`).getTime();
+            }
+            return null;
+        }
+
+        function parseEtaToSeconds(etaStr) {
+            let total = 0;
+            const days = etaStr.match(/(\d+)\s*d/);
+            const hours = etaStr.match(/(\d+)\s*h/);
+            const mins = etaStr.match(/(\d+)\s*m(?!s)/);
+            const secs = etaStr.match(/(\d+)\s*s/);
+
+            if (days) total += parseInt(days[1]) * 86400;
+            if (hours) total += parseInt(hours[1]) * 3600;
+            if (mins) total += parseInt(mins[1]) * 60;
+            if (secs) total += parseInt(secs[1]);
+            return total;
+        }
+
+        function parseStepDurationMs(line) {
+            // Regex to extract iteration execution duration: "51.590 ms" or "2.2799s"
+            const msMatch = line.match(/(\d+(?:\.\d+)?)\s*ms/);
+            if (msMatch) return parseFloat(msMatch[1]);
+            const secMatch = line.match(/(\d+(?:\.\d+)?)\s*s(?!\w)/);
+            if (secMatch) return parseFloat(secMatch[1]) * 1000;
+            return 45; // Default fallback to average iteration execution duration (~45ms)
+        }
+
+        function formatDuration(ms) {
+            if (ms == null || isNaN(ms) || ms <= 0) return "--";
+            const totalSec = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSec / 3600);
+            const mins = Math.floor((totalSec % 3600) / 60);
+            const secs = totalSec % 60;
+
+            if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+            if (mins > 0) return `${mins}m ${secs}s`;
+            return `${secs}s`;
+        }
+
+        function analyzeLine(line, lineIdx) {
+            if (line.includes("=== Reconstruction Program Started ===")) {
+                createNewSession(lineIdx);
+                const ts = extractTimestamp(line);
+                if (ts && currentSession) {
+                    currentSession.startTime = ts;
+                    currentSession.endTime = ts;
+                }
+                return;
+            }
+
+            if (!currentSession) createNewSession(lineIdx);
+
+            const s = currentSession;
+            const ts = extractTimestamp(line);
+            if (ts) {
+                if (!s.startTime) s.startTime = ts;
+                s.endTime = ts;
+                s.elapsedMs = Math.max(0, s.endTime - s.startTime);
+            }
+
+            if (line.includes("User selected video path:") || line.includes("Unfinished pipeline run detected for:")) {
+                const rawPath = line.includes("User selected video path:") 
+                    ? line.split("User selected video path:")[1].trim()
+                    : line.split("Unfinished pipeline run detected for:")[1].trim();
+                s.video = rawPath.split(/[\\/]/).pop();
+                registerVideoToMatrix(s.video);
+                renderSessionList();
+            }
+
+            // Cache Replays & Recovery Validation
+            if (line.includes("Resumption Verified: All") || line.includes("Skipping extraction")) {
+                s.stages.s1_extract.status = "SKIPPED";
+                s.stages.s1_extract.percent = 100;
+                const m = line.match(/All (\d+) frames/);
+                if (m) s.totalFrames = parseInt(m[1]);
+                if (videoAssetMatrix[s.video]) videoAssetMatrix[s.video].recoverySuccessCount++;
+                recordStageResumption(0, true);
+            }
+            if (line.includes("Existing keypoints") && line.includes("Skipping SIFT")) {
+                s.stages.s1_sift.status = "SKIPPED";
+                s.stages.s1_sift.percent = 100;
+                const m = line.match(/keypoints \((\d+)\)/);
+                if (m) s.siftProcessed = parseInt(m[1]);
+                if (videoAssetMatrix[s.video]) videoAssetMatrix[s.video].recoverySuccessCount++;
+                recordStageResumption(1, true);
+            }
+            if (line.includes("Existing verified matches") && line.includes("Skipping matching")) {
+                s.stages.s2_match.status = "SKIPPED";
+                s.stages.s2_match.percent = 100;
+                const m = line.match(/matches \((\d+)\)/);
+                if (m) s.matchedPairs = parseInt(m[1]);
+                if (videoAssetMatrix[s.video]) videoAssetMatrix[s.video].recoverySuccessCount++;
+                recordStageResumption(2, true);
+            }
+            if (line.includes("Existing sparse reconstruction") && line.includes("Skipping mapper")) {
+                s.stages.s3_mapper.status = "SKIPPED";
+                s.stages.s3_mapper.percent = 100;
+                if (videoAssetMatrix[s.video]) videoAssetMatrix[s.video].recoverySuccessCount++;
+                recordStageResumption(3, true);
+            }
+
+            // Stage 1A: Extraction
+            if (line.includes("Running FFmpeg:")) {
+                s.stages.s1_extract.status = "ACTIVE";
+                updateStageClock(s.stages.s1_extract, s.stageTimers.stage1, ts);
+            }
+            if (line.includes("Successfully extracted")) {
+                const m = line.match(/Successfully extracted (\d+) frames/);
+                if (m) s.totalFrames = parseInt(m[1]);
+                s.stages.s1_extract.status = "DONE";
+                s.stages.s1_extract.percent = 100;
+                updateStageClock(s.stages.s1_extract, s.stageTimers.stage1, ts);
+            }
+
+            // Stage 1B: SIFT
+            if (line.includes("feature_extraction.cc") && line.includes("Processed file")) {
+                s.stages.s1_sift.status = "ACTIVE";
+                updateStageClock(s.stages.s1_sift, s.stageTimers.stage1, ts);
+                const m = line.match(/Processed file \[(\d+)\/(\d+)\]/);
+                if (m) {
+                    s.siftProcessed = parseInt(m[1]);
+                    s.totalFrames = parseInt(m[2]);
+                    s.stages.s1_sift.percent = Math.round((s.siftProcessed / s.totalFrames) * 100);
+                    if (s.siftProcessed >= s.totalFrames) s.stages.s1_sift.status = "DONE";
+                }
+            }
+
+            // Stage 2: Matcher
+            if (line.includes("pairing.cc") && line.includes("Processing image")) {
+                s.stages.s2_match.status = "ACTIVE";
+                updateStageClock(s.stages.s2_match, s.stageTimers.stage2, ts);
+                const m = line.match(/Processing image \[(\d+)\/(\d+)\]/);
+                if (m) {
+                    s.matchedPairs = parseInt(m[1]);
+                    const tot = parseInt(m[2]);
+                    s.stages.s2_match.percent = Math.round((s.matchedPairs / tot) * 100);
+                    s.stages.s2_match.detail = `${s.matchedPairs} / ${tot} images`;
+                    if (s.matchedPairs >= tot) s.stages.s2_match.status = "DONE";
+                }
+            }
+            if (line.includes("Verified matches") || line.includes("matches found in database")) {
+                const m = line.match(/matches \((\d+)\)/);
+                if (m) s.matchedPairs = parseInt(m[1]);
+                s.stages.s2_match.status = "DONE";
+                s.stages.s2_match.percent = 100;
+                s.stages.s2_match.detail = `${s.matchedPairs} pairs verified`;
+                updateStageClock(s.stages.s2_match, s.stageTimers.stage2, ts);
+            }
+
+            // Stage 3: Sparse Mapper
+            if (line.includes("Running COLMAP step: mapper") || line.includes("incremental_pipeline.cc")) {
+                s.stages.s3_mapper.status = "ACTIVE";
+                updateStageClock(s.stages.s3_mapper, s.stageTimers.stage3, ts);
+                if (line.includes("mapper_caspar")) s.solver = "Caspar (GPU)";
+                else if (line.includes("mapper_ceres_gpu")) s.solver = "Ceres (CUDA)";
+                else if (line.includes("mapper_cpu")) s.solver = "Strict CPU";
+
+                const regMatch = line.match(/Registering image #\d+ \(num_reg_frames=(\d+)\)/);
+                if (regMatch) {
+                    s.registeredImages = parseInt(regMatch[1]);
+                    const tot = s.totalFrames || 350;
+                    s.stages.s3_mapper.percent = Math.min(100, Math.round((s.registeredImages / tot) * 100));
+                }
+                const ptMatch = line.match(/Image sees \d+ \/ (\d+) points/);
+                if (ptMatch) s.points = ptMatch[1];
+            }
+            if (line.includes("Keeping successful reconstruction")) {
+                s.stages.s3_mapper.status = "DONE";
+                s.stages.s3_mapper.percent = 100;
+                updateStageClock(s.stages.s3_mapper, s.stageTimers.stage3, ts);
+            }
+
+            // Stage 4: Gaussian Splatting
+            if (/^\d+\s+\(\d+\.\d+%\)/.test(line)) {
+                s.stages.s4_train.status = "ACTIVE";
+                const m = line.match(/^(\d+)\s+\((\d+\.\d+)%\)\s+([0-9\.]+\s*(?:ms|s))\s+([0-9\s,msd]+)\s+([0-9\.]+\s*M)/);
+                if (m) {
+                    const currentStep = parseInt(m[1]);
+                    s.gsplatIterations = currentStep;
+                    s.stages.s4_train.percent = parseFloat(m[2]);
+                    s.gsplatEta = m[4].trim();
+
+                    // Step Execution Duration
+                    const stepDelta = Math.max(1, currentStep - (s.lastStepNum || 0));
+                    s.lastStepNum = currentStep;
+                    const iterationPaceMs = parseStepDurationMs(line);
+                    const deltaElapsedMs = stepDelta * iterationPaceMs;
+
+                    s.stages.s4_train.elapsedMs += deltaElapsedMs;
+                    s.stageTimers.stage4.elapsedMs += deltaElapsedMs;
+                    s.elapsedMs += deltaElapsedMs;
+
+                    // Sample predicted ETA vs simulated wall-clock
+                    if (s.gsplatIterations % 1000 === 0) {
+                        s.trainingSamples.push({
+                            step: currentStep,
+                            pct: Math.round(s.stages.s4_train.percent),
+                            predictedEta: parseEtaToSeconds(s.gsplatEta),
+                            simElapsedSec: s.stages.s4_train.elapsedMs / 1000
+                        });
+                    }
+                }
+            }
+            if (line.includes("GSs duplicated")) {
+                const m = line.match(/Now having (\d+) GSs/);
+                if (m) s.gaussians = parseInt(m[1]).toLocaleString();
+            }
+            if (line.includes("Training Finished") || line.includes("GSPLAT training complete")) {
+                s.stages.s4_train.status = "DONE";
+                s.stages.s4_train.percent = 100;
+            }
+            if (line.includes("Exporting Gaussian Splat directly to standard .ply") || line.includes("Running Poisson Surface Reconstruction")) {
+                s.stages.s4_mesh.status = "ACTIVE";
+                s.stages.s4_mesh.percent = 50;
+                updateStageClock(s.stages.s4_mesh, s.stageTimers.stage4, ts);
+            }
+            if (line.includes("Exported successfully:") || line.includes("Colored 3D model saved")) {
+                s.stages.s4_mesh.status = "DONE";
+                s.stages.s4_mesh.percent = 100;
+                updateStageClock(s.stages.s4_mesh, s.stageTimers.stage4, ts);
+            }
+
+            // Stage 5: Dense MVS
+            if (line.includes("patch_match.cc") && line.includes("Processing view")) {
+                s.stages.s5_mvs.status = "ACTIVE";
+                updateStageClock(s.stages.s5_mvs, s.stageTimers.stage5, ts);
+                const m = line.match(/Processing view (\d+)\s*\/\s*(\d+)/);
+                if (m) {
+                    s.mvsViews = parseInt(m[1]);
+                    s.mvsTotal = parseInt(m[2]);
+                    s.stages.s5_mvs.percent = Math.round((s.mvsViews / s.mvsTotal) * 100);
+                }
+            }
+            if (line.includes("fusion.cc") && (line.includes("Fusing image") || line.includes("Starting fusion"))) {
+                s.stages.s5_mvs.status = "ACTIVE";
+                updateStageClock(s.stages.s5_mvs, s.stageTimers.stage5, ts);
+                const m = line.match(/Fusing image \[(\d+)\/(\d+)\]/);
+                if (m) {
+                    s.mvsViews = parseInt(m[1]);
+                    s.mvsTotal = parseInt(m[2]);
+                    s.stages.s5_mvs.percent = Math.round((s.mvsViews / s.mvsTotal) * 100);
+                }
+            }
+            if (line.includes("Number of fused points:") || line.includes("Writing output:")) {
+                s.stages.s5_mvs.status = "DONE";
+                s.stages.s5_mvs.percent = 100;
+                updateStageClock(s.stages.s5_mvs, s.stageTimers.stage5, ts);
+            }
+
+            if (line.includes("=== Entire Pipeline Complete.")) {
+                finalizeSessionState(s, "COMPLETED", null);
+            }
+
+            // Failure Attribution
+            if (line.includes("OutOfMemoryError: CUDA out of memory")) {
+                markCrash(s, "CUDA OOM (VRAM Exceeded)", "GSplat");
+            }
+            else if (line.includes("RuntimeError: Ninja is required")) {
+                markCrash(s, "Missing Dep (Ninja)", "GSplat");
+            }
+            else if (line.includes("fatal error C1189")) {
+                markCrash(s, "MSVC Preprocessor Syntax", "GSplat");
+            }
+            else if (line.includes("invalid numeric argument '/Wno-attributes'")) {
+                markCrash(s, "MSVC Clang Flag Leak", "GSplat");
+            }
+            else if (line.includes("Check failed: ba_local_backend != BundleAdjustmentBackend::CASPAR")) {
+                recordStageResumption(3, false);
+                markCrash(s, "Caspar Backend Unsupported", "Mapper");
+            }
+            else if (line.includes("No good initial image pair found")) {
+                recordStageResumption(3, false);
+                markCrash(s, "Mapper Initialization Failure", "Mapper");
+            }
+            else if (line.includes("exit code 3221225477")) {
+                markCrash(s, "Access Violation (0xC0000005)", "Dense/Mesh");
+            }
+            else if (line.includes("NameError: name")) {
+                markCrash(s, "Python Unbound Variable", "GSplat");
+            }
+            else if (line.includes("File not found:")) {
+                recordStageResumption(0, false);
+                markCrash(s, "Video File Nonexistent", "Extraction");
+            }
+        }
+
+        function markCrash(session, reason, stageKey) {
+            session.crashReason = reason;
+            session.failedStageKey = stageKey;
+            if (videoAssetMatrix[session.video]) {
+                videoAssetMatrix[session.video].recoveryFailureCount++;
+            }
+            finalizeSessionState(session, "CRASHED", stageKey);
+        }
+
+        function resetStageUI() {
+            const badges = ['badgeStage1', 'badgeStage2', 'badgeStage3', 'badgeStage4', 'badgeStage5'];
+            badges.forEach(b => {
+                document.getElementById(b).innerText = "PENDING";
+                document.getElementById(b).className = "status-badge";
+            });
+            const timeBadges = ['timeStage1', 'timeStage2', 'timeStage3', 'timeStage4', 'timeStage5'];
+            timeBadges.forEach(b => document.getElementById(b).innerText = "--");
+
+            const bars = ['barExtract', 'barSift', 'barMatch', 'barMapper', 'barGsplat', 'barGsplatMesh', 'barMvs'];
+            bars.forEach(b => {
+                document.getElementById(b).style.width = "0%";
+                document.getElementById(b).className = "progress-bar";
+            });
+
+            document.getElementById('substageExtractVal').innerText = "--";
+            document.getElementById('substageSiftVal').innerText = "--";
+            document.getElementById('substageMatchVal').innerText = "--";
+            document.getElementById('substageMapperVal').innerText = "--";
+            document.getElementById('substageTrainVal').innerText = "--";
+            document.getElementById('substageMeshVal').innerText = "--";
+            document.getElementById('substageMvsVal').innerText = "--";
+
+            document.getElementById('timeExtract').innerText = "";
+            document.getElementById('timeSift').innerText = "";
+            document.getElementById('timeMatch').innerText = "";
+            document.getElementById('timeMapper').innerText = "";
+            document.getElementById('timeGsplat').innerText = "";
+            document.getElementById('timeGsplatMesh').innerText = "";
+            document.getElementById('timeMvs').innerText = "";
+
+            document.getElementById('statVideoTarget').innerText = "--";
+            document.getElementById('statCrashDiag').innerText = "None";
+            document.getElementById('statSolver').innerText = "--";
+            document.getElementById('statPoints').innerText = "--";
+            document.getElementById('statGaussCount').innerText = "--";
+            document.getElementById('statTrainEta').innerText = "--";
+            document.getElementById('sessionTimeBadge').innerText = "00:00";
+        }
+
+        function renderSessionDataToUI(s) {
+            if (!s) return;
+
+            document.getElementById('currentSessionLabel').innerText = `Session #${s.id} Monitor`;
+            document.getElementById('sessionTimeBadge').innerText = formatDuration(s.elapsedMs);
+            const sBadge = document.getElementById('sessionStatusBadge');
+            sBadge.innerText = s.status;
+            sBadge.className = "status-badge";
+            if (s.status === "RUNNING") sBadge.classList.add("active");
+            else if (s.status === "COMPLETED") sBadge.classList.add("done");
+            else if (s.status === "CRASHED") sBadge.classList.add("fail");
+            else sBadge.classList.add("interrupted");
+
+            document.getElementById('statVideoTarget').innerText = s.video;
+            document.getElementById('statCrashDiag').innerText = s.crashReason || (s.status === "INTERRUPTED" ? "Interrupted (No Error)" : "Nominal");
+            document.getElementById('statCrashDiag').style.color = s.status === "CRASHED" ? "var(--danger)" : (s.status === "INTERRUPTED" ? "var(--warning)" : "var(--text-main)");
+            document.getElementById('statSolver').innerText = s.solver;
+            document.getElementById('statPoints').innerText = s.points;
+            document.getElementById('statGaussCount').innerText = s.gaussians;
+            document.getElementById('statTrainEta').innerText = s.gsplatEta;
+
+            // Master Stage Durations
+            document.getElementById('timeStage1').innerText = formatDuration(s.stageTimers.stage1.elapsedMs);
+            document.getElementById('timeStage2').innerText = formatDuration(s.stageTimers.stage2.elapsedMs);
+            document.getElementById('timeStage3').innerText = formatDuration(s.stageTimers.stage3.elapsedMs);
+            document.getElementById('timeStage4').innerText = formatDuration(s.stageTimers.stage4.elapsedMs);
+            document.getElementById('timeStage5').innerText = formatDuration(s.stageTimers.stage5.elapsedMs);
+
+            // Substage 1A
+            renderSubstage('barExtract', 'substageExtractVal', 'timeExtract', s.stages.s1_extract, `${s.totalFrames} frames`);
+            // Substage 1B
+            renderSubstage('barSift', 'substageSiftVal', 'timeSift', s.stages.s1_sift, `${s.siftProcessed} / ${s.totalFrames}`);
+            updateStageMasterBadge('badgeStage1', [s.stages.s1_extract, s.stages.s1_sift]);
+
+            // Stage 2
+            const matchDetail = (s.stages.s2_match.detail && s.stages.s2_match.detail !== "--") 
+                ? s.stages.s2_match.detail 
+                : `${s.stages.s2_match.percent}%`;
+            renderSubstage('barMatch', 'substageMatchVal', 'timeMatch', s.stages.s2_match, matchDetail);
+            updateStageMasterBadge('badgeStage2', [s.stages.s2_match]);
+
+            // Stage 3
+            renderSubstage('barMapper', 'substageMapperVal', 'timeMapper', s.stages.s3_mapper, `${s.registeredImages} / ${s.totalFrames}`);
+            updateStageMasterBadge('badgeStage3', [s.stages.s3_mapper]);
+
+            // Stage 4
+            renderSubstage('barGsplat', 'substageTrainVal', 'timeGsplat', s.stages.s4_train, `${s.stages.s4_train.percent}%`);
+            renderSubstage('barGsplatMesh', 'substageMeshVal', 'timeGsplatMesh', s.stages.s4_mesh, s.stages.s4_mesh.status);
+            updateStageMasterBadge('badgeStage4', [s.stages.s4_train, s.stages.s4_mesh]);
+
+            // Stage 5
+            renderSubstage('barMvs', 'substageMvsVal', 'timeMvs', s.stages.s5_mvs, `${s.mvsViews} / ${s.mvsTotal}`);
+            updateStageMasterBadge('badgeStage5', [s.stages.s5_mvs]);
+        }
+
+        function renderSubstage(barId, labelId, timerId, stageObj, detailText) {
+            const bar = document.getElementById(barId);
+            bar.style.width = stageObj.percent + "%";
+            bar.className = "progress-bar";
+            if (stageObj.status === "DONE" || stageObj.status === "SKIPPED") bar.classList.add("done");
+            else if (stageObj.status === "CRASHED") bar.classList.add("fail");
+
+            document.getElementById(labelId).innerText = stageObj.status === "SKIPPED" ? "CACHED" : detailText;
+            
+            const timerEl = document.getElementById(timerId);
+            if (timerEl) {
+                timerEl.innerText = stageObj.elapsedMs > 0 ? ` (${formatDuration(stageObj.elapsedMs)})` : "";
+            }
+        }
+
+        function updateStageMasterBadge(badgeId, subList) {
+            const el = document.getElementById(badgeId);
+            if (subList.some(x => x.status === "ACTIVE")) {
+                el.innerText = "RUNNING";
+                el.className = "status-badge active";
+            } else if (subList.every(x => x.status === "DONE" || x.status === "SKIPPED")) {
+                el.innerText = subList.every(x => x.status === "SKIPPED") ? "CACHED" : "DONE";
+                el.className = "status-badge done";
+            } else {
+                el.innerText = "PENDING";
+                el.className = "status-badge";
+            }
+        }
+    </script>
+</body>
+</html>
